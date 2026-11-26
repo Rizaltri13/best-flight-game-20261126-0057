@@ -1,7 +1,7 @@
 // Langit Nusantara — input: keyboard and mouse, both steering the same
 // aeroplane. Keys are the precise way to fly; the mouse is the relaxed way:
 // move it to bank and pitch, roll the wheel for throttle.
-export function createInput() {
+function createInput() {
   return {
     keys: new Set(),
     // Mouse steering: -1..1 offsets from the canvas centre, 0 when idle.
@@ -14,7 +14,7 @@ export function createInput() {
 }
 
 /** Read the intent the engine steps with this frame. */
-export function readIntent(input) {
+function readIntent(input) {
   const k = input.keys;
   let pitch = 0;
   let bank = 0;
@@ -43,7 +43,7 @@ export function readIntent(input) {
 }
 
 /** Wire keyboard and mouse listeners onto the canvas; returns a detach fn. */
-export function attachInput(canvas, input, hooks) {
+function attachInput(canvas, input, hooks) {
   function onKeyDown(event) {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) {
       event.preventDefault();
@@ -84,7 +84,7 @@ export function attachInput(canvas, input, hooks) {
 }
 
 /** The mouse goes quiet after 2.5 s without moving; keys take over again. */
-export function idleMouse(input, now) {
+function idleMouse(input, now) {
   if (input.mouseActive && now - input.mouseTime > 2500) {
     input.mouseActive = false;
     input.mouseX = 0;

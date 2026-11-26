@@ -1,7 +1,7 @@
 // Langit Nusantara — tuning constants for the flight model, the course and the
 // presentation. One place holds every number a designer would reach for, so the
 // engine, the world and the renderer all agree about the same aeroplane.
-export const WORLD = {
+const WORLD = {
   seed: 20261126,
   // The course runs north (+Z) from the departure strip to the arrival strip.
   courseLength: 9200,
@@ -16,7 +16,7 @@ export const WORLD = {
   ringRadius: 26,
 };
 
-export const PLANE = {
+const PLANE = {
   // Metres per second at idle and at full throttle, in level flight.
   minSpeed: 34,
   maxSpeed: 118,
@@ -39,7 +39,7 @@ export const PLANE = {
   landingMaxSpeed: 64,
 };
 
-export const SORTIE = {
+const SORTIE = {
   // Fuel units: 100 at take-off, rings refund some, throttle burns the rest.
   fuelStart: 100,
   fuelBurnIdle: 0.16,
@@ -54,7 +54,7 @@ export const SORTIE = {
   timeBonusPerSecond: 2,
 };
 
-export const VIEW = {
+const VIEW = {
   width: 1280,
   height: 720,
   fovDegrees: 72,
@@ -69,7 +69,7 @@ export const VIEW = {
   gridBehind: 6,
 };
 
-export const COLOURS = {
+const COLOURS = {
   skyTop: '#1d4e89',
   skyMid: '#7fb2dd',
   skyLow: '#cfe8f5',

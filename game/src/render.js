@@ -3,12 +3,10 @@
 // perspective camera, draws the aeroplane as a vector sprite, and lights the
 // instruments and HUD. No images, no fonts from the network: everything is
 // drawn, every frame, from the state the engine owns.
-import { COLOURS, VIEW } from './config.js';
-import { SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSE, SCREEN_WIN, SCREEN_LOSE, starsFor, headingLabel } from './engine.js';
 
-const DEG = Math.PI / 180;
+const DEG_R = Math.PI / 180;
 
-function clamp(v, a, b) {
+function clampR(v, a, b) {
   return v < a ? a : v > b ? b : v;
 }
 
@@ -29,8 +27,8 @@ function terrainColour(h, vary) {
 
 /** Build the chase camera from the aeroplane's attitude. */
 function cameraFor(state) {
-  const headingRad = state.heading * DEG;
-  const pitchRad = state.pitch * DEG;
+  const headingRad = state.heading * DEG_R;
+  const pitchRad = state.pitch * DEG_R;
   const fx = Math.sin(headingRad) * Math.cos(pitchRad);
   const fy = Math.sin(pitchRad);
   const fz = Math.cos(headingRad) * Math.cos(pitchRad);
@@ -57,16 +55,16 @@ function cameraFor(state) {
     y: R.z * F.x - R.x * F.z,
     z: R.x * F.y - R.y * F.x,
   };
-  const bankRad = -state.bank * DEG * 0.55;
+  const bankRad = -state.bank * DEG_R * 0.55;
   const cb = Math.cos(bankRad);
   const sb = Math.sin(bankRad);
   const R2 = { x: R.x * cb + U.x * sb, y: R.y * cb + U.y * sb, z: R.z * cb + U.z * sb };
   const U2 = { x: U.x * cb - R.x * sb, y: U.y * cb - R.y * sb, z: U.z * cb - R.z * sb };
-  return { pos: cam, F, R: R2, U: U2, pitch: Math.asin(clamp(F.y, -1, 1)) };
+  return { pos: cam, F, R: R2, U: U2, pitch: Math.asin(clampR(F.y, -1, 1)) };
 }
 
 function makeProjector(cam, w, h) {
-  const focal = (h / 2) / Math.tan((VIEW.fovDegrees / 2) * DEG);
+  const focal = (h / 2) / Math.tan((VIEW.fovDegrees / 2) * DEG_R);
   return function project(x, y, z) {
     const dx = x - cam.pos.x;
     const dy = y - cam.pos.y;
@@ -80,7 +78,7 @@ function makeProjector(cam, w, h) {
 }
 
 function drawSky(ctx, w, h, cam, time) {
-  const horizonY = h / 2 - Math.tan(cam.pitch) * ((h / 2) / Math.tan((VIEW.fovDegrees / 2) * DEG));
+  const horizonY = h / 2 - Math.tan(cam.pitch) * ((h / 2) / Math.tan((VIEW.fovDegrees / 2) * DEG_R));
   const sky = ctx.createLinearGradient(0, 0, 0, Math.max(horizonY, 1));
   sky.addColorStop(0, COLOURS.skyTop);
   sky.addColorStop(0.6, COLOURS.skyMid);
@@ -314,8 +312,8 @@ function drawClouds(ctx, project, world, state) {
 
 /** The aeroplane, seen from behind and above: red-and-white livery, prop blur. */
 function drawPlane(ctx, project, state, time) {
-  const headingRad = state.heading * DEG;
-  const pitchRad = state.pitch * DEG;
+  const headingRad = state.heading * DEG_R;
+  const pitchRad = state.pitch * DEG_R;
   const nose = {
     x: state.x + Math.sin(headingRad) * Math.cos(pitchRad) * 7,
     y: state.y + Math.sin(pitchRad) * 7,
@@ -325,12 +323,12 @@ function drawPlane(ctx, project, state, time) {
   if (!p) return;
   const cx = p.x;
   const cy = p.y + 46;
-  const scale = clamp(p.scale * 0.9, 0.35, 2.2);
+  const scale = clampR(p.scale * 0.9, 0.35, 2.2);
   const span = 150 * scale;
   const len = 150 * scale;
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(-state.bank * DEG);
+  ctx.rotate(-state.bank * DEG_R);
   // Propeller blur at the nose (top of the sprite, the aeroplane flies up-screen).
   ctx.fillStyle = 'rgba(220, 230, 240, 0.35)';
   ctx.beginPath();
@@ -376,12 +374,14 @@ function drawPlane(ctx, project, state, time) {
   ctx.lineTo(-span * 0.05, len * 0.42);
   ctx.closePath();
   ctx.fill();
-  // Navigation lights: green port, red starboard, blinking white tail.
-  ctx.fillStyle = '#37e07a';
+  // Navigation lights: red port (left wingtip), green starboard (right
+  // wingtip), blinking white tail — the aviation convention, seen from
+  // behind the aeroplane.
+  ctx.fillStyle = '#ff5a4e';
   ctx.beginPath();
   ctx.arc(-span / 2, len * 0.12, 4, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#ff5a4e';
+  ctx.fillStyle = '#37e07a';
   ctx.beginPath();
   ctx.arc(span / 2, len * 0.12, 4, 0, Math.PI * 2);
   ctx.fill();
@@ -397,7 +397,7 @@ function drawPlane(ctx, project, state, time) {
   const shadow = project(state.x, groundY + 1, state.z);
   if (shadow && state.y < 260) {
     ctx.save();
-    ctx.globalAlpha = clamp(0.35 - state.y / 900, 0.05, 0.35);
+    ctx.globalAlpha = clampR(0.35 - state.y / 900, 0.05, 0.35);
     ctx.fillStyle = '#06283d';
     ctx.beginPath();
     ctx.ellipse(shadow.x, shadow.y, 26 * shadow.scale * 0.4, 8 * shadow.scale * 0.4, 0, 0, Math.PI * 2);
@@ -475,7 +475,7 @@ function drawHud(ctx, w, h, state, world) {
     const dx = ring.x - state.x;
     const dz = ring.z - state.z;
     const dist = Math.round(Math.hypot(dx, state.y - ring.y, dz));
-    const bearing = (Math.atan2(dx, dz) / DEG + 360) % 360;
+    const bearing = (Math.atan2(dx, dz) / DEG_R + 360) % 360;
     let rel = ((bearing - state.heading + 540) % 360) - 180;
     ctx.textAlign = 'center';
     ctx.fillStyle = COLOURS.hudAmber;
@@ -516,8 +516,11 @@ function drawInstruments(ctx, w, h, state) {
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.clip();
   ctx.translate(cx, cy);
-  ctx.rotate(-state.bank * DEG);
-  const pitchPx = clamp(state.pitch, -30, 30) * 1.6;
+  ctx.rotate(-state.bank * DEG_R);
+  // Nose up moves the real horizon DOWN on the instrument: the horizon line
+  // sits below the fixed aeroplane symbol by the pitch angle, so more sky
+  // shows above it. (It used to move up — inverted.)
+  const pitchPx = -clampR(state.pitch, -30, 30) * 1.6;
   ctx.fillStyle = '#3f8fd2';
   ctx.fillRect(-r - 4, -r - 4 - pitchPx, r * 2 + 8, r + 4 + pitchPx);
   ctx.fillStyle = '#7a5a34';
@@ -582,7 +585,7 @@ function drawInstruments(ctx, w, h, state) {
   ctx.fillStyle = '#12283a';
   ctx.fillRect(fx, cy - 12, 150, 16);
   ctx.fillStyle = state.fuel < 25 ? COLOURS.hudRed : COLOURS.hudGreen;
-  ctx.fillRect(fx, cy - 12, 150 * clamp(state.fuel / 100, 0, 1), 16);
+  ctx.fillRect(fx, cy - 12, 150 * clampR(state.fuel / 100, 0, 1), 16);
   ctx.strokeStyle = COLOURS.panelEdge;
   ctx.strokeRect(fx, cy - 12, 150, 16);
   ctx.fillStyle = COLOURS.hudCyan;
@@ -595,7 +598,7 @@ function drawInstruments(ctx, w, h, state) {
   ctx.fillStyle = '#12283a';
   ctx.fillRect(fx, cy + 32, 150, 10);
   ctx.fillStyle = COLOURS.hudAmber;
-  ctx.fillRect(fx, cy + 32, 150 * clamp(state.throttle, 0, 1), 10);
+  ctx.fillRect(fx, cy + 32, 150 * clampR(state.throttle, 0, 1), 10);
   ctx.strokeStyle = COLOURS.panelEdge;
   ctx.strokeRect(fx, cy + 32, 150, 10);
   // Warning lights.
@@ -662,7 +665,7 @@ function drawEnd(ctx, w, h, state) {
       `Bahan bakar tersisa: ${Math.round(state.fuel)}%   •   Sisa siang: ${Math.round(state.timeLeft)} dtk`,
       '',
       'Tekan R untuk terbang lagi',
-    ], 'MENDARAT MULUS!', COLOURS.hudGreen);
+    ], state.gearDown ? 'MENDARAT MULUS!' : 'MENDARAT DARURAT!', state.gearDown ? COLOURS.hudGreen : COLOURS.hudAmber);
     ctx.font = '64px system-ui, sans-serif';
     ctx.fillText('★'.repeat(stars) + '☆'.repeat(3 - stars), w / 2, h / 2 + 130);
   } else if (state.screen === SCREEN_LOSE) {
@@ -683,7 +686,7 @@ function drawEnd(ctx, w, h, state) {
 }
 
 /** Draw one frame: world, aeroplane, HUD, then the screen overlay. */
-export function renderFrame(ctx, state, world, w, h, time) {
+function renderFrame(ctx, state, world, w, h, time) {
   const cam = cameraFor(state);
   const project = makeProjector(cam, w, h);
   drawSky(ctx, w, h, cam, time);

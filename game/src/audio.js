@@ -1,7 +1,7 @@
 // Langit Nusantara — sound, synthesised live with WebAudio: an engine hum
 // that follows the throttle, a chime for each ring, an alarm when the wing
 // stalls, and a short fanfare for a good landing. No audio files, no network.
-export function createAudio() {
+function createAudio() {
   return {
     ctx: null,
     master: null,
@@ -14,7 +14,7 @@ export function createAudio() {
 }
 
 /** Start the audio graph. Must run from a user gesture (key or click). */
-export function startAudio(audio) {
+function startAudio(audio) {
   if (audio.started) return;
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -58,7 +58,7 @@ export function startAudio(audio) {
 }
 
 /** Follow the aeroplane each frame: pitch and loudness track throttle/speed. */
-export function updateAudio(audio, state) {
+function updateAudio(audio, state) {
   if (!audio.started || !audio.ctx) return;
   const t = audio.ctx.currentTime;
   const throttle = state.screen === 'play' ? state.throttle : 0;
@@ -85,31 +85,31 @@ function tone(audio, freq, seconds, type, volume, when = 0) {
 }
 
 /** Two-note chime when a ring is collected. */
-export function playRing(audio) {
+function playRing(audio) {
   tone(audio, 880, 0.25, 'sine', 0.22);
   tone(audio, 1318, 0.4, 'sine', 0.18, 0.09);
 }
 
 /** Low alarm for a stall or an empty tank. */
-export function playAlarm(audio) {
+function playAlarm(audio) {
   tone(audio, 220, 0.18, 'square', 0.12);
   tone(audio, 220, 0.18, 'square', 0.12, 0.22);
 }
 
 /** Rising arpeggio for a landing worth celebrating. */
-export function playFanfare(audio) {
+function playFanfare(audio) {
   const notes = [523, 659, 784, 1046];
   notes.forEach((freq, i) => tone(audio, freq, 0.5, 'triangle', 0.2, i * 0.13));
 }
 
 /** A dull thud for a crash. */
-export function playThud(audio) {
+function playThud(audio) {
   tone(audio, 70, 0.5, 'sine', 0.4);
   tone(audio, 45, 0.7, 'sine', 0.3, 0.05);
 }
 
 /** Mute or unmute everything at once. */
-export function toggleMute(audio) {
+function toggleMute(audio) {
   audio.muted = !audio.muted;
   if (audio.master && audio.ctx) {
     audio.master.gain.setTargetAtTime(audio.muted ? 0 : 0.5, audio.ctx.currentTime, 0.05);

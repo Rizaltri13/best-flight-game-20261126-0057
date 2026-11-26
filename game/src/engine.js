@@ -2,20 +2,19 @@
 // state (position, attitude, speed, fuel, rings, score), steps the physics, and
 // decides the three endings: landed, crashed, or out of fuel and daylight.
 // The renderer only reads this state; the input only writes an intent.
-import { PLANE, SORTIE, WORLD } from './config.js';
 
-export const SCREEN_TITLE = 'title';
-export const SCREEN_PLAY = 'play';
-export const SCREEN_PAUSE = 'pause';
-export const SCREEN_WIN = 'win';
-export const SCREEN_LOSE = 'lose';
+const SCREEN_TITLE = 'title';
+const SCREEN_PLAY = 'play';
+const SCREEN_PAUSE = 'pause';
+const SCREEN_WIN = 'win';
+const SCREEN_LOSE = 'lose';
 
-export const EVENT_NONE = 0;
-export const EVENT_RING = 1;
-export const EVENT_LANDED = 2;
-export const EVENT_CRASHED = 4;
-export const EVENT_FUEL_EMPTY = 8;
-export const EVENT_TIME_UP = 16;
+const EVENT_NONE = 0;
+const EVENT_RING = 1;
+const EVENT_LANDED = 2;
+const EVENT_CRASHED = 4;
+const EVENT_FUEL_EMPTY = 8;
+const EVENT_TIME_UP = 16;
 
 const DEG = Math.PI / 180;
 
@@ -30,7 +29,7 @@ function moveToward(value, target, step) {
 }
 
 /** A fresh sortie: on the departure strip, engine idling, daylight ahead. */
-export function createState() {
+function createState() {
   return {
     screen: SCREEN_TITLE,
     x: 0,
@@ -67,7 +66,7 @@ export function createState() {
  * brake: bool } where pitch +1 is nose up and bank +1 is right wing down.
  * Returns an event bitmask (EVENT_RING, EVENT_LANDED, ...).
  */
-export function stepFlight(state, input, dt, world) {
+function stepFlight(state, input, dt, world) {
   if (state.screen !== SCREEN_PLAY) return EVENT_NONE;
   let events = EVENT_NONE;
   const ground = world.heightAt(state.x, state.z);
@@ -84,12 +83,12 @@ export function stepFlight(state, input, dt, world) {
   state.bank = moveToward(state.bank, bankTarget, PLANE.bankRate * dt);
   state.pitch = moveToward(state.pitch, pitchTarget, PLANE.pitchRate * dt);
 
-  // A stalled wing cannot hold the nose up while airborne: it drops and the
-  // aeroplane sinks. On the ground the wing is not flying yet, so the
-  // take-off roll is unaffected.
-  state.stalled = state.speed < PLANE.stallSpeed;
   const airborne = state.y - ground > 8;
-  const effectivePitch = state.stalled && airborne ? Math.min(state.pitch, -6) : state.pitch;
+  // Stalled is a flying condition: on the ground the wing is not flying
+  // yet, so the take-off roll shows no stall warning and the nose-drop
+  // below only ever applies while airborne.
+  state.stalled = state.speed < PLANE.stallSpeed && airborne;
+  const effectivePitch = state.stalled ? Math.min(state.pitch, -6) : state.pitch;
 
   // Turning: bank tilts the lift vector, so the heading follows the bank.
   const turn = (state.bank / 45) * PLANE.turnAt45Bank * (state.speed / PLANE.maxSpeed + 0.35);
@@ -136,9 +135,11 @@ export function stepFlight(state, input, dt, world) {
     events |= EVENT_TIME_UP;
   }
 
-  // Rings: crossing the ring's plane inside its circle collects it.
-  const ring = world.rings[state.nextRing];
-  if (ring && !ring.passed) {
+  // Rings: crossing any unpassed ring's plane inside its circle collects
+  // it. Every ring is checked, so missing one never locks out the rest —
+  // the next ring is always the first one still unpassed.
+  for (const ring of world.rings) {
+    if (ring.passed) continue;
     const dx = state.x - ring.x;
     const dy = state.y - ring.y;
     const dz = state.z - ring.z;
@@ -146,7 +147,6 @@ export function stepFlight(state, input, dt, world) {
     if (dist < ring.radius * 0.95) {
       ring.passed = true;
       state.ringsPassed += 1;
-      state.nextRing += 1;
       state.score += SORTIE.ringPoints;
       state.fuel = Math.min(SORTIE.fuelStart, state.fuel + SORTIE.fuelPerRing);
       state.message = `CINCIN ${state.ringsPassed}/8! +${SORTIE.ringPoints} poin, +bahan bakar`;
@@ -154,6 +154,8 @@ export function stepFlight(state, input, dt, world) {
       events |= EVENT_RING;
     }
   }
+  state.nextRing = world.rings.findIndex((r) => !r.passed);
+  if (state.nextRing < 0) state.nextRing = world.rings.length;
 
   // Trail for the renderer: one point a step, capped.
   state.trail.unshift({ x: state.x, y: state.y, z: state.z });
@@ -165,6 +167,14 @@ export function stepFlight(state, input, dt, world) {
   // strip it may be a landing, in the sea it is a ditching, anywhere else
   // at speed it is a crash.
   const clearance = state.y - ground;
+  // Climbing into rising ground is a crash too: the contact check below
+  // only runs while descending, so a steep climb used to tunnel through a
+  // hillside or the volcano without ever crashing.
+  if (clearance <= 0 && vy > 0.5) {
+    state.screen = SCREEN_LOSE;
+    state.endReason = 'Menabrak bukit saat menanjak.';
+    events |= EVENT_CRASHED;
+  }
   const runway = world.runway;
   const overRunway =
     Math.abs(state.x - runway.x) < runway.width / 2 + 6 &&
@@ -176,10 +186,14 @@ export function stepFlight(state, input, dt, world) {
     if (overRunway && aligned && gentle && state.y - runway.y < 6) {
       state.landed = true;
       state.screen = SCREEN_WIN;
-      state.score += SORTIE.landingPoints;
+      // A belly landing is a landing, but not a clean one: half the landing
+      // points, and never three stars (see starsFor).
+      state.score += state.gearDown ? SORTIE.landingPoints : Math.round(SORTIE.landingPoints / 2);
       state.score += Math.round(state.fuel * SORTIE.fuelBonusPerUnit);
       state.score += Math.round(state.timeLeft * SORTIE.timeBonusPerSecond);
-      state.endReason = 'Mendarat mulus di Bandara Elang, Denpasar.';
+      state.endReason = state.gearDown
+        ? 'Mendarat mulus di Bandara Elang, Denpasar.'
+        : 'Mendarat tanpa roda — pesawat selamat, tapi pendaratan tidak bersih.';
       events |= EVENT_LANDED;
     } else if (state.speed < 58 && ground > 1 && sink <= PLANE.landingMaxSink) {
       // A gentle touch at low speed is a roll, not a crash: the take-off
@@ -209,16 +223,18 @@ export function stepFlight(state, input, dt, world) {
   return events;
 }
 
-/** Stars for the win screen: landing is one, rings earn the rest. */
-export function starsFor(state) {
+/** Stars for the win screen: landing is one, rings earn the rest. A belly
+ * landing (gear up at touchdown) can never earn three stars, however many
+ * rings were collected. */
+function starsFor(state) {
   if (!state.landed) return 0;
-  if (state.ringsPassed >= 8) return 3;
+  if (state.ringsPassed >= 8) return state.gearDown ? 3 : 2;
   if (state.ringsPassed >= 5) return 2;
   return 1;
 }
 
 /** Compass label for a heading in degrees (0 = north). */
-export function headingLabel(heading) {
+function headingLabel(heading) {
   const points = ['U', 'UTL', 'TL', 'TTL', 'T', 'TTG', 'TG', 'STG', 'S', 'SBD', 'BD', 'BBD', 'B', 'BBL', 'BL', 'UBL'];
   const index = Math.round((((heading % 360) + 360) % 360) / 22.5) % 16;
   return points[index];

@@ -3,13 +3,11 @@
 // number of steps, steered by a simple autopilot (bank toward the next ring,
 // pitch toward its altitude, throttle held high), so the frame is what a
 // short flight really looks like and the same seed always gives the same frame.
-import { SCREEN_TITLE, SCREEN_PLAY, SCREEN_WIN, createState, stepFlight } from './engine.js';
-import { WORLD } from './config.js';
 
-const STEP = 1 / 60;
-const DEG = Math.PI / 180;
+const STEP_S = 1 / 60;
+const DEG_S = Math.PI / 180;
 
-function clamp(v, a, b) {
+function clampS(v, a, b) {
   return v < a ? a : v > b ? b : v;
 }
 
@@ -46,19 +44,19 @@ function autopilot(state, world, landing) {
   }
   const dx = targetX - state.x;
   const dz = targetZ - state.z;
-  const wantHeading = (Math.atan2(dx, dz) / DEG + 360) % 360;
+  const wantHeading = (Math.atan2(dx, dz) / DEG_S + 360) % 360;
   const diff = angleDiff(state.heading, wantHeading);
-  const bank = clamp(diff / 28, -1, 1);
+  const bank = clampS(diff / 28, -1, 1);
   const altError = targetY - state.y;
   let pitch = 0;
   if (landing) {
-    pitch = clamp(altError / 60, -0.45, 0.3);
+    pitch = clampS(altError / 60, -0.45, 0.3);
   } else {
-    pitch = clamp(altError / 90, -0.5, 0.7);
+    pitch = clampS(altError / 90, -0.5, 0.7);
   }
   // Terrain avoidance: if the ground ahead rises above the aeroplane, climb
   // now — the volcano's slopes are not a line the course should ever take.
-  const headingRad = (state.heading * DEG);
+  const headingRad = (state.heading * DEG_S);
   for (const ahead of [400, 800, 1200]) {
     const tx = state.x + Math.sin(headingRad) * ahead;
     const tz = state.z + Math.cos(headingRad) * ahead;
@@ -73,9 +71,9 @@ function autopilot(state, world, landing) {
 
 /** Run the autopilot for up to `maxSeconds`, stopping early on `stopWhen`. */
 function fly(state, world, maxSeconds, landing, stopWhen) {
-  const steps = Math.floor(maxSeconds / STEP);
+  const steps = Math.floor(maxSeconds / STEP_S);
   for (let i = 0; i < steps; i += 1) {
-    stepFlight(state, autopilot(state, world, landing), STEP, world);
+    stepFlight(state, autopilot(state, world, landing), STEP_S, world);
     if (state.screen !== SCREEN_PLAY) break;
     if (stopWhen && stopWhen(state)) break;
   }
@@ -88,7 +86,7 @@ function fly(state, world, maxSeconds, landing, stopWhen) {
  * (mid-course, a ring ahead), ring (passing a ring), land (final approach
  * to the runway, gear down).
  */
-export function stageShot(name, world) {
+function stageShot(name, world) {
   const state = createState();
   state.screen = SCREEN_PLAY;
   state.speed = 0;

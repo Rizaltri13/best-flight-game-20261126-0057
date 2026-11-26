@@ -2,20 +2,6 @@
 // changes on keys, the canvas sized to the window, and the ?shot= staging
 // the screenshots are taken from. The loop never trusts the wall clock for
 // the simulation: every step is 1/60 s of flight.
-import { buildWorld } from './world.js';
-import {
-  SCREEN_TITLE, SCREEN_PLAY, SCREEN_PAUSE, SCREEN_WIN, SCREEN_LOSE,
-  createState, stepFlight, EVENT_RING, EVENT_LANDED, EVENT_CRASHED,
-  EVENT_FUEL_EMPTY,
-} from './engine.js';
-import { renderFrame } from './render.js';
-import { createInput, attachInput, readIntent, idleMouse } from './input.js';
-import {
-  createAudio, startAudio, updateAudio, playRing, playAlarm, playFanfare,
-  playThud, toggleMute,
-} from './audio.js';
-import { stageShot } from './shots.js';
-import { VIEW } from './config.js';
 
 const STEP = 1 / 60;
 
@@ -54,6 +40,10 @@ function announce(text) {
 
 function startSortie() {
   const keepBest = best;
+  // A fresh sortie is a fresh course: the rings live on the shared world,
+  // so their collected flags must be cleared too — otherwise a restart
+  // after a crash could never re-earn the rings already collected.
+  for (const ring of world.rings) ring.passed = false;
   state = createState();
   state.best = keepBest;
   state.screen = SCREEN_PLAY;

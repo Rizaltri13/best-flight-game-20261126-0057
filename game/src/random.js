@@ -2,7 +2,7 @@
 // helpers the terrain and the clouds are built from. Same seed, same islands,
 // same rings, same sky — every run, every screenshot, every machine.
 /** A seeded generator: returns a float in [0, 1) and never touches Math.random. */
-export function mulberry32(seed) {
+function mulberry32(seed) {
   let a = seed >>> 0;
   return function next() {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -14,7 +14,7 @@ export function mulberry32(seed) {
 }
 
 /** Deterministic 2D value noise in [0, 1): smooth, repeatable, seed-fixed. */
-export function makeNoise(seed) {
+function makeNoise(seed) {
   const rand = mulberry32(seed);
   const size = 64;
   const grid = new Float32Array(size * size);
@@ -35,7 +35,7 @@ export function makeNoise(seed) {
 }
 
 /** Pick `count` items out of `list` with the seeded generator, no repeats. */
-export function pickSome(rand, list, count) {
+function pickSome(rand, list, count) {
   const copy = list.slice();
   const out = [];
   while (copy.length > 0 && out.length < count) {

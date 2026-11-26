@@ -2,8 +2,6 @@
 // beaches, forest and one volcano), the ring course, the arrival runway and the
 // clouds. Everything is derived from the fixed seed in config.js, so the world
 // a screenshot shows is the world a player flies.
-import { WORLD } from './config.js';
-import { mulberry32, makeNoise } from './random.js';
 
 // A bump: a smooth hill that fades to nothing at its radius.
 function bump(dx, dz, radius) {
@@ -13,7 +11,7 @@ function bump(dx, dz, radius) {
   return t * t;
 }
 
-export function buildWorld() {
+function buildWorld() {
   const rand = mulberry32(WORLD.seed);
   const noise = makeNoise(WORLD.seed ^ 0x9e3779b9);
   const islands = [];
