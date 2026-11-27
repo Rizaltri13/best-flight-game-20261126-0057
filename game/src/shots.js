@@ -69,6 +69,37 @@ function autopilot(state, world, landing) {
   return { pitch, bank, throttle, brake: landing && state.speed > 62 && world.runway.z - state.z < 1200 };
 }
 
+/**
+ * A straight-in final for the win scene: aim at a point past the far end
+ * of the strip (so the heading never flips around the runway centre the
+ * way the autopilot's does), hold a gentle descent onto the centreline,
+ * gear down, landing speed. The engine still flies every step — this only
+ * chooses the stick inputs, like a pilot who has stopped sightseeing.
+ */
+function flyStraightIn(state, world, maxSeconds) {
+  const steps = Math.floor(maxSeconds / STEP_S);
+  for (let i = 0; i < steps; i += 1) {
+    const aimZ = world.runway.z + 2000;
+    const dx = world.runway.x - state.x;
+    const dz = aimZ - state.z;
+    const wantHeading = (Math.atan2(dx, dz) / DEG_S + 360) % 360;
+    const diff = angleDiff(state.heading, wantHeading);
+    const bank = clampS(diff / 30, -0.7, 0.7);
+    const distToStrip = world.runway.z - state.z;
+    // A steeper glide than the autopilot's: the shallow one crossed the
+    // far end of the strip still airborne and wandered off over the sea.
+    const targetY = 9 + Math.max(0, distToStrip - 150) * 0.09;
+    const pitch = clampS((targetY - state.y) / 45, -0.55, 0.3);
+    state.gearDown = distToStrip < 2400;
+    let throttle = 0;
+    if (state.speed < 54) throttle = 0.6;
+    else if (state.speed > 60) throttle = -0.6;
+    stepFlight(state, { pitch, bank, throttle, brake: state.speed > 60 }, STEP_S, world);
+    if (state.screen !== SCREEN_PLAY) break;
+  }
+  return state;
+}
+
 /** Run the autopilot for up to `maxSeconds`, stopping early on `stopWhen`. */
 function fly(state, world, maxSeconds, landing, stopWhen) {
   const steps = Math.floor(maxSeconds / STEP_S);
@@ -84,7 +115,9 @@ function fly(state, world, maxSeconds, landing, stopWhen) {
  * Set `world` and a fresh state to the named scene and return the screen to
  * draw over it. Names: start (title over the departure strip), play
  * (mid-course, a ring ahead), ring (passing a ring), land (final approach
- * to the runway, gear down).
+ * to the runway, gear down), cover (the play frame, staged as the entry's
+ * cover image), win (the whole sortie flown to its landing and its win
+ * screen: stars, final score, fuel and daylight left).
  */
 function stageShot(name, world) {
   const state = createState();
@@ -115,7 +148,21 @@ function stageShot(name, world) {
     const screen = state.screen === SCREEN_PLAY ? SCREEN_PLAY : state.screen;
     return { state, screen, best: state.score };
   }
-  // play: about 45 seconds into the sortie, mid-course with a ring ahead.
+  if (name === 'win') {
+    // Fly the course, collect the last ring on the centreline, then fly a
+    // straight-in final until the sortie ends: the win screen over the
+    // strip, with the stars and the score the flight earned.
+    fly(state, world, 200, false, (s) => s.z > 7400);
+    if (state.screen === SCREEN_PLAY) {
+      fly(state, world, 60, false, (s) => s.nextRing >= 8 || s.z > 8200);
+    }
+    if (state.screen === SCREEN_PLAY) {
+      flyStraightIn(state, world, 180);
+    }
+    return { state, screen: state.screen, best: state.score };
+  }
+  // play and cover: about 45 seconds into the sortie, mid-course with the
+  // volcano ahead and a ring on the nose.
   fly(state, world, 46, false, null);
   return { state, screen: state.screen === SCREEN_PLAY ? SCREEN_PLAY : state.screen, best: state.score };
 }

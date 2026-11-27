@@ -72,6 +72,27 @@ function buildWorld() {
     });
   }
 
+  // Boats on the sea lanes between the islands: fishing perahu with a
+  // triangular sail and small cargo boats, scattered from their own random
+  // stream so the course, the rings and the clouds stay exactly as seeded.
+  // A boat is kept only where the water is open (heightAt below sea level),
+  // clear of both strips.
+  const boatRand = mulberry32(WORLD.seed ^ 0x51ab);
+  const boats = [];
+  for (let i = 0; i < 40 && boats.length < 16; i += 1) {
+    const bx = (boatRand() * 2 - 1) * 1500;
+    const bz = 500 + boatRand() * (WORLD.courseLength - 1000);
+    if (heightAt(bx, bz) > -3) continue;
+    if (Math.abs(bx) < 200 && (bz < 700 || bz > WORLD.runwayZ - 700)) continue;
+    boats.push({
+      x: bx,
+      z: bz,
+      heading: boatRand() * 360,
+      size: 16 + boatRand() * 14,
+      sail: boatRand() > 0.45,
+    });
+  }
+
   // Ground height at (x, z): sea is 0, islands rise from their bumps, and a
   // little noise roughens the slopes. The runway island is flattened near
   // the strip so the ground under the threshold is dead level.
@@ -107,5 +128,5 @@ function buildWorld() {
     heading: 0,
   };
 
-  return { islands, rings, clouds, runway, heightAt };
+  return { islands, rings, clouds, boats, runway, heightAt };
 }

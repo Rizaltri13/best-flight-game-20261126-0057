@@ -19,7 +19,8 @@ function hash2(x, z) {
 function terrainColour(h, vary) {
   if (h < 1.5) return COLOURS.seaShallow;
   if (h < 4) return COLOURS.sand;
-  if (h < 95) return vary > 0.5 ? '#68ad55' : COLOURS.grass;
+  if (h < 40) return vary > 0.5 ? '#63a851' : COLOURS.grass;
+  if (h < 95) return vary > 0.5 ? '#559548' : '#4c8a41';
   if (h < 190) return vary > 0.5 ? '#357a33' : COLOURS.forest;
   if (h < 280) return COLOURS.rock;
   return COLOURS.volcano;
@@ -105,6 +106,20 @@ function drawSky(ctx, w, h, cam, time) {
   sea.addColorStop(1, COLOURS.seaDeep);
   ctx.fillStyle = sea;
   ctx.fillRect(0, Math.max(horizonY, 0), w, h - Math.max(horizonY, 0));
+  // Sun glitter: a broken column of light on the water under the sun, so
+  // the open sea reads as water and not as a flat band of colour.
+  ctx.save();
+  for (let row = 0; row < 9; row += 1) {
+    const gy = horizonY + 14 + row * row * 3.4;
+    if (gy > h - 130) break;
+    const gw = 26 + row * 30;
+    const jitter = (hash2(row, 7) - 0.5) * gw * 0.7;
+    ctx.fillStyle = `rgba(255, 240, 190, ${0.16 - row * 0.013})`;
+    ctx.beginPath();
+    ctx.ellipse(sunX + jitter, gy, gw / 2, 2.2 + row * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
   return horizonY;
 }
 
@@ -137,9 +152,11 @@ function drawTerrain(ctx, project, world, state) {
   for (const q of quads) {
     if (q.avg < 0.5) continue; // open sea is the gradient underneath
     let colour = terrainColour(q.avg, q.vary);
-    if (q.slope > 26) {
-      // Steep ground reads darker, so ridges and cliffs show.
-      ctx.fillStyle = shade(colour, 0.72);
+    if (q.slope > 14) {
+      // Steep ground reads darker, so ridges and cliffs show — graduated
+      // with the slope, so hillsides shade smoothly instead of banding.
+      const steep = Math.min(1, (q.slope - 14) / 34);
+      ctx.fillStyle = shade(colour, 1 - steep * 0.3);
     } else {
       ctx.fillStyle = colour;
     }
@@ -237,6 +254,73 @@ function drawBox(ctx, project, x, y, z, w, h, d, colour, roof) {
   ctx.fill();
 }
 
+/**
+ * The boats on the sea lanes: a pointed hull, a white cabin or a triangular
+ * perahu sail, and a pale V of wake behind. Drawn far-to-near so a nearer
+ * boat overlaps a farther one, and skipped when too small to read.
+ */
+function drawBoats(ctx, project, world) {
+  const list = [];
+  for (const boat of world.boats || []) {
+    const p = project(boat.x, 0, boat.z);
+    if (!p) continue;
+    list.push({ boat, p });
+  }
+  list.sort((a, b) => b.p.depth - a.p.depth);
+  for (const { boat, p } of list) {
+    const s = boat.size * p.scale;
+    if (s < 5 || s > 260) continue;
+    const rad = boat.heading * DEG_R;
+    const fx = Math.sin(rad);
+    const fz = Math.cos(rad);
+    // Project the hull's four corners from its heading so the boat sits in
+    // the world, not on the screen.
+    const corners = [
+      [fx * 0.5, fz * 0.5, 0],
+      [fz * 0.16, -fx * 0.16, 1],
+      [-fx * 0.42, -fz * 0.42, 1],
+      [-fz * 0.16, fx * 0.16, 1],
+    ];
+    const pts = corners.map(([ox, oz]) => project(boat.x + ox * boat.size, 0.4, boat.z + oz * boat.size));
+    if (pts.some((q) => !q)) continue;
+    // Wake: two pale streaks trailing the stern.
+    const stern = project(boat.x - fx * boat.size * 0.5, 0.2, boat.z - fz * boat.size * 0.5);
+    const wakeEnd = project(boat.x - fx * boat.size * 2.1, 0.2, boat.z - fz * boat.size * 2.1);
+    if (stern && wakeEnd) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(230, 248, 255, 0.5)';
+      ctx.lineWidth = Math.max(1, s * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(stern.x, stern.y);
+      ctx.lineTo(wakeEnd.x + s * 0.16, wakeEnd.y);
+      ctx.moveTo(stern.x, stern.y);
+      ctx.lineTo(wakeEnd.x - s * 0.16, wakeEnd.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = '#7a4a2b';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < 4; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fill();
+    if (boat.sail) {
+      // A white lateen sail above the hull.
+      ctx.fillStyle = 'rgba(250, 248, 238, 0.95)';
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x, p.y - s * 0.85);
+      ctx.lineTo(p.x + s * 0.42, p.y - s * 0.06);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // A small white cabin block amidships.
+      ctx.fillStyle = '#f2ede0';
+      ctx.fillRect(p.x - s * 0.11, p.y - s * 0.2, s * 0.22, s * 0.18);
+    }
+  }
+}
+
 function drawRings(ctx, project, world, state) {
   for (let i = 0; i < world.rings.length; i += 1) {
     const ring = world.rings[i];
@@ -275,7 +359,7 @@ function drawRings(ctx, project, world, state) {
       ctx.fillStyle = COLOURS.hudAmber;
       ctx.font = `bold ${Math.max(13, Math.min(22, radius * 0.22))}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(`CINCIN ${i + 1}/8`, p.x, p.y - radius - 10);
+      ctx.fillText(`RING ${i + 1}/8`, p.x, p.y - radius - 10);
     }
     ctx.restore();
   }
@@ -294,6 +378,15 @@ function drawClouds(ctx, project, world, state) {
     if (size < 4 || size > 900) continue;
     ctx.save();
     ctx.globalAlpha = 0.85;
+    // A shaded belly first, so the cloud reads as a body with a sunlit top
+    // and a grey underside rather than a flat white blob.
+    const belly = ctx.createRadialGradient(p.x, p.y + size * 0.22, 1, p.x, p.y + size * 0.22, size * 0.95);
+    belly.addColorStop(0, 'rgba(148, 178, 205, 0.55)');
+    belly.addColorStop(1, 'rgba(148, 178, 205, 0)');
+    ctx.fillStyle = belly;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y + size * 0.22, size * 0.95, 0, Math.PI * 2);
+    ctx.fill();
     for (let i = 0; i < cloud.puffs; i += 1) {
       const off = (hash2(cloud.x, i * 17) - 0.5) * size * 1.4;
       const offY = (hash2(cloud.z, i * 31) - 0.5) * size * 0.3;
@@ -329,18 +422,34 @@ function drawPlane(ctx, project, state, time) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(-state.bank * DEG_R);
-  // Propeller blur at the nose (top of the sprite, the aeroplane flies up-screen).
-  ctx.fillStyle = 'rgba(220, 230, 240, 0.35)';
+  // Propeller blur at the nose (top of the sprite, the aeroplane flies up-screen):
+  // a faint disc with two brighter streaks, not a solid bubble.
+  ctx.fillStyle = 'rgba(220, 230, 240, 0.16)';
   ctx.beginPath();
   ctx.ellipse(0, -len * 0.52, span * 0.16, len * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
-  // Main wings, red with white tips.
+  ctx.strokeStyle = 'rgba(240, 246, 250, 0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-span * 0.15, -len * 0.52);
+  ctx.lineTo(span * 0.15, -len * 0.52);
+  ctx.stroke();
+  // Main wings, red with white tips and a darker trailing edge, so the wing
+  // reads as a surface with a front and a back.
   ctx.fillStyle = '#c0392b';
   ctx.beginPath();
   ctx.moveTo(-span / 2, len * 0.08);
   ctx.lineTo(-span * 0.08, -len * 0.02);
   ctx.lineTo(span * 0.08, -len * 0.02);
   ctx.lineTo(span / 2, len * 0.08);
+  ctx.lineTo(span * 0.3, len * 0.16);
+  ctx.lineTo(-span * 0.3, len * 0.16);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#93302a';
+  ctx.beginPath();
+  ctx.moveTo(-span * 0.3, len * 0.115);
+  ctx.lineTo(span * 0.3, len * 0.115);
   ctx.lineTo(span * 0.3, len * 0.16);
   ctx.lineTo(-span * 0.3, len * 0.16);
   ctx.closePath();
@@ -359,6 +468,25 @@ function drawPlane(ctx, project, state, time) {
   ctx.fill();
   ctx.fillStyle = '#c0392b';
   ctx.fillRect(-span * 0.015, -len * 0.5, span * 0.03, len * 0.8);
+  // The canopy: a dark glass teardrop over the cockpit, with a pale
+  // sun-catch along its spine — the detail that makes the sprite read as a
+  // built aeroplane rather than a flat cut-out.
+  ctx.fillStyle = '#22384c';
+  ctx.beginPath();
+  ctx.ellipse(0, -len * 0.16, span * 0.045, len * 0.13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(190, 225, 245, 0.75)';
+  ctx.beginPath();
+  ctx.ellipse(-span * 0.012, -len * 0.2, span * 0.016, len * 0.07, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Panel shading down the fuselage's right flank.
+  ctx.fillStyle = 'rgba(120, 110, 100, 0.25)';
+  ctx.beginPath();
+  ctx.moveTo(span * 0.03, -len * 0.34);
+  ctx.quadraticCurveTo(span * 0.075, -len * 0.05, span * 0.06, len * 0.32);
+  ctx.lineTo(span * 0.03, len * 0.32);
+  ctx.closePath();
+  ctx.fill();
   // Tailplane and fin.
   ctx.fillStyle = '#c0392b';
   ctx.beginPath();
@@ -441,7 +569,7 @@ function drawHud(ctx, w, h, state, world) {
   for (let d = -60; d <= 60; d += 15) {
     const deg = Math.round(((hdg + d) % 360 + 360) % 360);
     const x = stripX + stripW / 2 + d * (stripW / 130);
-    const label = deg % 90 === 0 ? ['U', 'T', 'S', 'B'][deg / 90] : String(deg);
+    const label = deg % 90 === 0 ? ['N', 'E', 'S', 'W'][deg / 90] : String(deg);
     ctx.fillText(label, x, 38);
     ctx.fillRect(x - 1, 16, 2, 8);
   }
@@ -461,14 +589,14 @@ function drawHud(ctx, w, h, state, world) {
   ctx.textAlign = 'right';
   ctx.fillStyle = COLOURS.hudAmber;
   ctx.font = 'bold 24px system-ui, sans-serif';
-  ctx.fillText(`SKOR ${state.score}`, w - 26, 42);
+  ctx.fillText(`SCORE ${state.score}`, w - 26, 42);
   ctx.fillStyle = COLOURS.hudCyan;
   ctx.font = 'bold 20px system-ui, sans-serif';
-  ctx.fillText(`CINCIN ${state.ringsPassed}/8`, w - 26, 70);
+  ctx.fillText(`RINGS ${state.ringsPassed}/8`, w - 26, 70);
   const mm = Math.floor(state.timeLeft / 60);
   const ss = Math.floor(state.timeLeft % 60);
   ctx.fillStyle = state.timeLeft < 60 ? COLOURS.hudRed : COLOURS.hudGreen;
-  ctx.fillText(`SIANG ${mm}:${String(ss).padStart(2, '0')}`, w - 26, 94);
+  ctx.fillText(`DAYLIGHT ${mm}:${String(ss).padStart(2, '0')}`, w - 26, 94);
   // Next-ring pointer: distance and a chevron toward it.
   const ring = world.rings[state.nextRing];
   if (ring && state.screen === SCREEN_PLAY) {
@@ -480,7 +608,15 @@ function drawHud(ctx, w, h, state, world) {
     ctx.textAlign = 'center';
     ctx.fillStyle = COLOURS.hudAmber;
     ctx.font = 'bold 18px system-ui, sans-serif';
-    ctx.fillText(`CINCIN BERIKUTNYA ${dist} m ${rel > 15 ? '▶' : rel < -15 ? '◀' : '▲'}`, w / 2, 78);
+    ctx.fillText(`NEXT RING ${dist} m ${rel > 15 ? '▶' : rel < -15 ? '◀' : '▲'}`, w / 2, 78);
+    // The sortie's objective, spelled out under the compass: thread every
+    // golden ring, then put her down at Denpasar before the light goes.
+    ctx.fillStyle = 'rgba(220, 238, 248, 0.92)';
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    const objective = state.nextRing < 8
+      ? 'MISSION: THREAD THE 8 GOLDEN RINGS — THEN LAND AT DENPASAR'
+      : 'MISSION: ALL RINGS FLOWN — LAND AT DENPASAR, GEAR DOWN';
+    ctx.fillText(objective, w / 2, 100);
   }
   // Centre message flash.
   if (state.messageTime > 0 && state.message) {
@@ -549,7 +685,7 @@ function drawInstruments(ctx, w, h, state) {
   ctx.fillStyle = COLOURS.hudCyan;
   ctx.font = 'bold 12px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('HORIZON', cx, y0 + panelH - 8);
+  ctx.fillText('ATTITUDE', cx, y0 + panelH - 8);
   // Altimeter + vertical speed.
   const ax = 250;
   ctx.fillStyle = COLOURS.hudCyan;
@@ -558,14 +694,14 @@ function drawInstruments(ctx, w, h, state) {
   ctx.fillText(`${Math.max(0, Math.round(state.y))}`, ax, cy - 8);
   ctx.font = 'bold 13px system-ui, sans-serif';
   ctx.fillStyle = '#9fc6dd';
-  ctx.fillText('meter', ax, cy + 12);
+  ctx.fillText('metres', ax, cy + 12);
   const vs = state.verticalSpeed;
   ctx.fillStyle = vs > 0.5 ? COLOURS.hudGreen : vs < -0.5 ? COLOURS.hudRed : COLOURS.hudCyan;
   ctx.font = 'bold 16px system-ui, sans-serif';
   ctx.fillText(`${vs >= 0 ? '+' : ''}${vs.toFixed(1)} m/s`, ax, cy + 34);
   ctx.fillStyle = '#9fc6dd';
   ctx.font = 'bold 12px system-ui, sans-serif';
-  ctx.fillText('VERTIKAL', ax, y0 + panelH - 8);
+  ctx.fillText('VERTICAL', ax, y0 + panelH - 8);
   // Airspeed.
   const sx = 430;
   ctx.fillStyle = COLOURS.hudAmber;
@@ -573,15 +709,15 @@ function drawInstruments(ctx, w, h, state) {
   ctx.fillText(`${Math.round(state.speed * 3.6)}`, sx, cy - 8);
   ctx.fillStyle = '#9fc6dd';
   ctx.font = 'bold 13px system-ui, sans-serif';
-  ctx.fillText('km/jam', sx, cy + 12);
+  ctx.fillText('km/h', sx, cy + 12);
   ctx.fillStyle = state.stalled ? COLOURS.hudRed : COLOURS.hudGreen;
   ctx.font = 'bold 16px system-ui, sans-serif';
-  ctx.fillText(state.stalled ? 'STALL!' : 'TERBANG', sx, cy + 34);
+  ctx.fillText(state.stalled ? 'STALL!' : 'FLYING', sx, cy + 34);
   // Fuel gauge.
   const fx = 620;
   ctx.fillStyle = '#9fc6dd';
   ctx.font = 'bold 13px system-ui, sans-serif';
-  ctx.fillText('BAHAN BAKAR', fx, cy - 22);
+  ctx.fillText('FUEL', fx, cy - 22);
   ctx.fillStyle = '#12283a';
   ctx.fillRect(fx, cy - 12, 150, 16);
   ctx.fillStyle = state.fuel < 25 ? COLOURS.hudRed : COLOURS.hudGreen;
@@ -606,8 +742,8 @@ function drawInstruments(ctx, w, h, state) {
   ctx.textAlign = 'left';
   const warnings = [
     { on: state.stalled, label: 'STALL', colour: COLOURS.hudRed },
-    { on: state.lowFuel, label: 'BBM RENDAH', colour: COLOURS.hudRed },
-    { on: state.gearDown, label: 'RODA TURUN', colour: COLOURS.hudGreen },
+    { on: state.lowFuel, label: 'LOW FUEL', colour: COLOURS.hudRed },
+    { on: state.gearDown, label: 'GEAR DOWN', colour: COLOURS.hudGreen },
   ];
   warnings.forEach((warn, i) => {
     const lx = wx + i * 130;
@@ -640,19 +776,19 @@ function overlay(ctx, w, h, lines, title, colour) {
 
 function drawTitle(ctx, w, h, state) {
   overlay(ctx, w, h, [
-    'Terbang di atas kepulauan Indonesia — lewati 8 cincin emas,',
-    'lalu mendarat mulus di Bandara Elang, Denpasar.',
+    'Fly the Indonesian archipelago — thread 8 golden rings,',
+    'then land her gently at Bandara Elang, Denpasar.',
     '',
-    '↑ / ↓  hidung naik-turun      ← / →  belok & miring',
-    'W / S  throttle      Spasi  rem udara      G  roda pendarat',
-    'Mouse: gerakkan untuk mengemudi, roda mouse untuk throttle',
-    'P  jeda      R  ulangi      M  suara',
+    '↑ / ↓  pitch the nose      ← / →  turn & bank',
+    'W / S  throttle      Space  airbrake      G  landing gear',
+    'Mouse: move to steer, wheel for throttle',
+    'P  pause      R  restart      M  sound',
     '',
-    'Tekan ENTER untuk lepas landas',
+    'Press ENTER to take off',
   ], 'LANGIT NUSANTARA', COLOURS.hudAmber);
   ctx.fillStyle = COLOURS.hudCyan;
   ctx.font = 'bold 18px system-ui, sans-serif';
-  ctx.fillText('Pesawat Elang Nusantara E-01  •  Skor terbaik: ' + state.best, w / 2, h / 2 + 215);
+  ctx.fillText('Elang Nusantara E-01  •  Best score: ' + state.best, w / 2, h / 2 + 215);
 }
 
 function drawEnd(ctx, w, h, state) {
@@ -661,27 +797,27 @@ function drawEnd(ctx, w, h, state) {
     overlay(ctx, w, h, [
       state.endReason,
       '',
-      `Skor akhir: ${state.score}   •   Cincin: ${state.ringsPassed}/8`,
-      `Bahan bakar tersisa: ${Math.round(state.fuel)}%   •   Sisa siang: ${Math.round(state.timeLeft)} dtk`,
+      `Final score: ${state.score}   •   Rings: ${state.ringsPassed}/8`,
+      `Fuel left: ${Math.round(state.fuel)}%   •   Daylight left: ${Math.round(state.timeLeft)} s`,
       '',
-      'Tekan R untuk terbang lagi',
-    ], state.gearDown ? 'MENDARAT MULUS!' : 'MENDARAT DARURAT!', state.gearDown ? COLOURS.hudGreen : COLOURS.hudAmber);
+      'Press R to fly again',
+    ], state.gearDown ? 'SMOOTH LANDING!' : 'BELLY LANDING!', state.gearDown ? COLOURS.hudGreen : COLOURS.hudAmber);
     ctx.font = '64px system-ui, sans-serif';
     ctx.fillText('★'.repeat(stars) + '☆'.repeat(3 - stars), w / 2, h / 2 + 130);
   } else if (state.screen === SCREEN_LOSE) {
     overlay(ctx, w, h, [
       state.endReason,
       '',
-      `Skor: ${state.score}   •   Cincin: ${state.ringsPassed}/8`,
+      `Score: ${state.score}   •   Rings: ${state.ringsPassed}/8`,
       '',
-      'Tekan R untuk mencoba lagi',
-    ], 'PENERBANGAN GAGAL', COLOURS.hudRed);
+      'Press R to try again',
+    ], 'FLIGHT OVER', COLOURS.hudRed);
   } else if (state.screen === SCREEN_PAUSE) {
     overlay(ctx, w, h, [
-      'Penerbangan dijeda.',
+      'The flight is paused.',
       '',
-      'Tekan P untuk melanjutkan, R untuk mengulang',
-    ], 'JEDA', COLOURS.hudCyan);
+      'Press P to resume, R to restart',
+    ], 'PAUSED', COLOURS.hudCyan);
   }
 }
 
@@ -691,6 +827,7 @@ function renderFrame(ctx, state, world, w, h, time) {
   const project = makeProjector(cam, w, h);
   drawSky(ctx, w, h, cam, time);
   drawTerrain(ctx, project, world, state);
+  drawBoats(ctx, project, world);
   drawRunway(ctx, project, world);
   drawRings(ctx, project, world, state);
   drawClouds(ctx, project, world, state);

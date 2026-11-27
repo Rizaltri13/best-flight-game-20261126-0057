@@ -110,7 +110,7 @@ function stepFlight(state, input, dt, world) {
   // The world ends at the map edge: turn the aeroplane back, gently.
   if (state.z > WORLD.courseLength + 600 || Math.abs(state.x) > 2400 || state.z < -500) {
     state.heading = (state.heading + 180 * dt * 0.5 + 360) % 360;
-    state.message = 'Balik! Kamu keluar dari area penerbangan.';
+    state.message = 'Turn back! You are leaving the flying area.';
     state.messageTime = 2;
   }
   // Ceiling: thin air above 900 m will not hold the climb.
@@ -149,7 +149,7 @@ function stepFlight(state, input, dt, world) {
       state.ringsPassed += 1;
       state.score += SORTIE.ringPoints;
       state.fuel = Math.min(SORTIE.fuelStart, state.fuel + SORTIE.fuelPerRing);
-      state.message = `CINCIN ${state.ringsPassed}/8! +${SORTIE.ringPoints} poin, +bahan bakar`;
+      state.message = `RING ${state.ringsPassed}/8! +${SORTIE.ringPoints} points, +fuel`;
       state.messageTime = 2.5;
       events |= EVENT_RING;
     }
@@ -172,7 +172,7 @@ function stepFlight(state, input, dt, world) {
   // hillside or the volcano without ever crashing.
   if (clearance <= 0 && vy > 0.5) {
     state.screen = SCREEN_LOSE;
-    state.endReason = 'Menabrak bukit saat menanjak.';
+    state.endReason = 'Flew into rising ground while climbing.';
     events |= EVENT_CRASHED;
   }
   const runway = world.runway;
@@ -192,8 +192,8 @@ function stepFlight(state, input, dt, world) {
       state.score += Math.round(state.fuel * SORTIE.fuelBonusPerUnit);
       state.score += Math.round(state.timeLeft * SORTIE.timeBonusPerSecond);
       state.endReason = state.gearDown
-        ? 'Mendarat mulus di Bandara Elang, Denpasar.'
-        : 'Mendarat tanpa roda — pesawat selamat, tapi pendaratan tidak bersih.';
+        ? 'A smooth touchdown at Bandara Elang, Denpasar.'
+        : 'A belly landing — the aeroplane survived, but it was not a clean arrival.';
       events |= EVENT_LANDED;
     } else if (state.speed < 58 && ground > 1 && sink <= PLANE.landingMaxSink) {
       // A gentle touch at low speed is a roll, not a crash: the take-off
@@ -203,22 +203,22 @@ function stepFlight(state, input, dt, world) {
     } else {
       state.screen = SCREEN_LOSE;
       state.endReason = clearance <= 0.5 && ground <= 1
-        ? 'Mendarat di laut — pesawat tenggelam.'
+        ? 'Ditched in the sea — the aeroplane went down.'
         : sink > PLANE.landingMaxSink
-          ? 'Pendaratan terlalu keras — roda patah.'
-          : 'Menabrak tanah.';
+          ? 'Too hard a touchdown — the gear collapsed.'
+          : 'Hit the ground.';
       events |= EVENT_CRASHED;
     }
   }
 
   if (events & EVENT_FUEL_EMPTY) {
     // A dead stick can still glide to the strip; only the ground decides.
-    state.message = 'BAHAN BAKAR HABIS — melayang tanpa mesin!';
+    state.message = 'OUT OF FUEL — gliding on a dead stick!';
     state.messageTime = 3;
   }
   if (events & EVENT_TIME_UP && state.screen === SCREEN_PLAY) {
     state.screen = SCREEN_LOSE;
-    state.endReason = 'Waktu habis — matahari terbenam sebelum mendarat.';
+    state.endReason = 'Out of daylight — the sun set before the landing.';
   }
   return events;
 }
@@ -235,7 +235,7 @@ function starsFor(state) {
 
 /** Compass label for a heading in degrees (0 = north). */
 function headingLabel(heading) {
-  const points = ['U', 'UTL', 'TL', 'TTL', 'T', 'TTG', 'TG', 'STG', 'S', 'SBD', 'BD', 'BBD', 'B', 'BBL', 'BL', 'UBL'];
+  const points = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
   const index = Math.round((((heading % 360) + 360) % 360) / 22.5) % 16;
   return points[index];
 }

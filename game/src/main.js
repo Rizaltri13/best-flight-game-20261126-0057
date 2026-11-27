@@ -50,7 +50,7 @@ function startSortie() {
   state.speed = 0;
   state.throttle = 0.55;
   startAudio(audio);
-  announce('Lepas landas! Terbang melewati delapan cincin, lalu mendarat di Denpasar.');
+  announce('Take off! Thread the eight golden rings, then land at Denpasar.');
 }
 
 function restart() {
@@ -69,18 +69,18 @@ function onKey(code) {
   }
   if (code === 'KeyP' && (state.screen === SCREEN_PLAY || state.screen === SCREEN_PAUSE)) {
     state.screen = state.screen === SCREEN_PLAY ? SCREEN_PAUSE : SCREEN_PLAY;
-    announce(state.screen === SCREEN_PAUSE ? 'Jeda.' : 'Lanjut terbang.');
+    announce(state.screen === SCREEN_PAUSE ? 'Paused.' : 'Flying again.');
     return;
   }
   if (code === 'KeyG' && state.screen === SCREEN_PLAY) {
     state.gearDown = !state.gearDown;
-    state.message = state.gearDown ? 'Roda pendarat turun.' : 'Roda pendarat naik.';
+    state.message = state.gearDown ? 'Landing gear down.' : 'Landing gear up.';
     state.messageTime = 1.5;
     return;
   }
   if (code === 'KeyM') {
     const muted = toggleMute(audio);
-    state.message = muted ? 'Suara mati.' : 'Suara hidup.';
+    state.message = muted ? 'Sound off.' : 'Sound on.';
     state.messageTime = 1.5;
   }
 }
@@ -110,11 +110,11 @@ function frame(now) {
           state.best = best;
           saveBest();
         }
-        announce(`Mendarat mulus! Skor ${state.score}.`);
+        announce(`Smooth landing! Score ${state.score}.`);
       }
       if (events & EVENT_CRASHED) {
         playThud(audio);
-        announce(`Penerbangan gagal: ${state.endReason}`);
+        announce(`Flight over: ${state.endReason}`);
       }
       if (events & EVENT_FUEL_EMPTY) playAlarm(audio);
       if (state.stalled && alarmCooldown <= 0) {
